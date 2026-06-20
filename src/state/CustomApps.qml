@@ -18,9 +18,12 @@ import Quickshell.Hyprland
 Singleton {
     id: root
 
-    property string filePath: Directories.customAppsPath
+    // Same location ii-eve's shell used (Directories.state exists on both shells), so
+    // existing custom apps carry over and it works on shells lacking customAppsPath.
+    property string filePath: FileUtils.trimFileProtocol(`${Directories.state}/user/customApps.json`)
     property string iconCacheDir: FileUtils.trimFileProtocol(`${Directories.cache}/customApps/icons`)
-    property string exeIconScript: FileUtils.trimFileProtocol(`${Directories.scriptPath}/icons/extract-exe-icon-venv.sh`)
+    // Bundled script, resolved relative to this file — not the host shell's scripts dir.
+    property string exeIconScript: FileUtils.trimFileProtocol(Qt.resolvedUrl("../scripts/icons/extract-exe-icon-venv.sh"))
     property alias entries: customAppsAdapter.entries
     property alias dirs: customAppsAdapter.dirs
     property alias folders: customAppsAdapter.folders
