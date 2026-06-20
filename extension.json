@@ -1,0 +1,22 @@
+{
+  "name": "App Launcher",
+  "description": "Application launcher with folders, recents, vimium-style keyboard nav and a binary picker (extracted from ii-eve).",
+  "version": "1.0.0",
+  "author": "djOB2EOTWQW1",
+  "icon": "apps",
+  "configDefaults": {
+    "hotkey": "SUPER,SPACE"
+  },
+  "configSchema": {
+    "hotkey": {
+      "type": "string",
+      "label": "Launcher hotkey (hyprctl bind syntax, e.g. SUPER,SPACE)",
+      "default": "SUPER,SPACE"
+    }
+  },
+  "contributes": {
+    "services": [
+      { "id": "appLauncherHost", "qml": "src/services/AppLauncherHost.qml" }
+    ]
+  }
+}

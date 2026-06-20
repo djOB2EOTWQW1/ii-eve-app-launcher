@@ -1,0 +1,2 @@
+singleton LauncherState 1.0 LauncherState.qml
+singleton CustomApps 1.0 CustomApps.qml
