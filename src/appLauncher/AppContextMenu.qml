@@ -3,6 +3,7 @@ import "../state"
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "../common"
 import QtQuick
 import QtQuick.Layouts
 
