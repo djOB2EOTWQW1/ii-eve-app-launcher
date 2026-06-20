@@ -1,3 +1,4 @@
 singleton LauncherState 1.0 LauncherState.qml
 singleton CustomApps 1.0 CustomApps.qml
 singleton GpuInfo 1.0 GpuInfo.qml
+singleton LauncherPersist 1.0 LauncherPersist.qml

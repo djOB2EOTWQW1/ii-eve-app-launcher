@@ -30,7 +30,7 @@ ContentPage {
 
             Rectangle {
                 id: sizePreview
-                readonly property int previewSize: Persistent.states.appLauncher?.iconSize ?? 64
+                readonly property int previewSize: LauncherPersist?.iconSize ?? 64
                 implicitWidth: 112
                 implicitHeight: 112
                 radius: Appearance.rounding.normal
@@ -93,12 +93,12 @@ ContentPage {
                     buttonIcon: "photo_size_select_large"
                     from: 32
                     to: 96
-                    value: Persistent.states.appLauncher?.iconSize ?? 64
+                    value: LauncherPersist?.iconSize ?? 64
                     onValueChanged: {
-                        if (!Persistent.states.appLauncher) return
+                        if (!LauncherPersist) return
                         const rounded = Math.round(value)
-                        if (Persistent.states.appLauncher.iconSize !== rounded) {
-                            Persistent.states.appLauncher.iconSize = rounded
+                        if (LauncherPersist.iconSize !== rounded) {
+                            LauncherPersist.iconSize = rounded
                         }
                     }
                 }
@@ -134,18 +134,17 @@ ContentPage {
                         { displayName: Translation.tr("Fullscreen"), icon: "fullscreen", value: "current" },
                         { displayName: Translation.tr("Windowed"), icon: "aspect_ratio", value: "settings" }
                     ]
-                    currentValue: Persistent.states.appLauncher?.windowSize ?? "settings"
+                    currentValue: LauncherPersist?.windowSize ?? "settings"
                     onSelected: (value) => {
-                        if (Persistent.states.appLauncher)
-                            Persistent.states.appLauncher.windowSize = value
+                        if (LauncherPersist)
+                            LauncherPersist.windowSize = value
                     }
-                    registry: page.registry
                 }
 
                 StyledText {
                     Layout.leftMargin: 36
                     Layout.topMargin: 2
-                    text: (Persistent.states.appLauncher?.windowSize ?? "settings") === "current"
+                    text: (LauncherPersist?.windowSize ?? "settings") === "current"
                     ? Translation.tr("Fullscreen uses the entire screen")
                     : Translation.tr("Windowed: 900×750")
                     color: Appearance.colors.colSubtext

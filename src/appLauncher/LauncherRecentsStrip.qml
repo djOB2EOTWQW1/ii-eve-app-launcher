@@ -16,7 +16,7 @@ ColumnLayout {
     // Reference to LauncherContent's root (for closing on activate, etc.).
     property var launcher
 
-    readonly property string mode: Persistent.states.appLauncher?.recentsMode ?? "recent"
+    readonly property string mode: LauncherPersist?.recentsMode ?? "recent"
     readonly property var model: root.mode === "frequent"
         ? CustomApps.frequentApps
         : CustomApps.recentApps
@@ -43,7 +43,7 @@ ColumnLayout {
             implicitHeight: 24
             buttonRadius: Appearance.rounding.full
             onClicked: {
-                const al = Persistent.states.appLauncher
+                const al = LauncherPersist
                 if (!al) return
                 al.recentsMode = (root.mode === "recent") ? "frequent" : "recent"
             }
@@ -68,7 +68,7 @@ ColumnLayout {
                 anchors.topMargin: -5
                 registry: root.launcher?.mainRegistry ?? null
                 onActivated: {
-                    const al = Persistent.states.appLauncher
+                    const al = LauncherPersist
                     if (!al) return
                     al.recentsMode = (root.mode === "recent") ? "frequent" : "recent"
                 }

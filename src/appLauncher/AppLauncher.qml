@@ -89,7 +89,7 @@ Scope {
                 border.color: Appearance.colors.colLayer0Border
                 radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
 
-                readonly property bool fixedSize: (Persistent.states.appLauncher?.windowSize ?? "settings") === "settings"
+                readonly property bool fixedSize: (LauncherPersist?.windowSize ?? "settings") === "settings"
                 anchors.centerIn: parent
                 width: fixedSize ? 900 : (parent.width - 2 * Appearance.sizes.hyprlandGapsOut)
                 height: fixedSize ? 750 : (parent.height - 2 * Appearance.sizes.hyprlandGapsOut)
@@ -125,7 +125,7 @@ Scope {
             color: "transparent"
             visible: LauncherState.appLauncherOpen
 
-            readonly property bool fixedSize: (Persistent.states.appLauncher?.windowSize ?? "settings") === "settings"
+            readonly property bool fixedSize: (LauncherPersist?.windowSize ?? "settings") === "settings"
             width: fixedSize ? 900 : implicitWidth
             height: fixedSize ? 750 : implicitHeight
 

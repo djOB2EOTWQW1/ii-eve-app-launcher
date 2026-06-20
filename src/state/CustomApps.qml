@@ -671,23 +671,23 @@ Singleton {
         return `'${String(s).replace(/'/g, `'\\''`)}'`
     }
 
-    // Cached parse of Persistent.states.appLauncher.launchParams.perAppJson.
+    // Cached parse of LauncherPersist.launchParams.perAppJson.
     // Re-evaluates only when the JSON source string changes, so callers (this
     // service's launch path and the settings UI) can index it as a plain object.
     readonly property var perAppMap: {
-        const lp = Persistent.states.appLauncher?.launchParams
+        const lp = LauncherPersist?.launchParams
         if (!lp) return ({})
         try { return JSON.parse(lp.perAppJson || "{}") } catch (e) { return ({}) }
     }
 
     readonly property var launchStatsMap: {
-        const al = Persistent.states.appLauncher
+        const al = LauncherPersist
         if (!al) return ({})
         try { return JSON.parse(al.launchStatsJson || "{}") } catch (e) { return ({}) }
     }
 
     function _writeLaunchStats(map) {
-        const al = Persistent.states.appLauncher
+        const al = LauncherPersist
         if (!al) return
         al.launchStatsJson = JSON.stringify(map)
     }
@@ -820,7 +820,7 @@ Singleton {
     // Treat both fields as user-trusted shell input; never feed external /
     // untrusted text into them.
     function _buildLaunchPrefix(path) {
-        const lp = Persistent.states.appLauncher?.launchParams
+        const lp = LauncherPersist?.launchParams
         if (!lp) return ""
         const entry = root.perAppMap[path] || null
         // Defaults apply to every native binary unless the user has explicitly

@@ -24,7 +24,7 @@ MouseArea {
     // cursor; without this Qt may swallow the press silently.
     propagateComposedEvents: true
 
-    readonly property int iconSize: Persistent.states.appLauncher?.iconSize ?? 64
+    readonly property int iconSize: LauncherPersist?.iconSize ?? 64
 
     // Tracks which folder tile the current drag is hovering over.
     // Cleared on drop/release. Uses folder id to survive model updates.

@@ -19,7 +19,7 @@ ContentPage {
 
     property var registry: null
 
-    readonly property var lp: Persistent.states.appLauncher?.launchParams ?? null
+    readonly property var lp: LauncherPersist?.launchParams ?? null
 
     // Default Launch Parameters
     ContentSection {
