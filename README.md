@@ -27,14 +27,8 @@ in your Hyprland config.
   hl.bind("SUPER + SPACE", hl.dsp.global("quickshell:appLauncherToggle"), { description = "Shell: Toggle app launcher" })
   ```
 
-  (Runtime binding via `hyprctl keyword bind` is attempted as a best-effort fallback, but
-  Hyprland's non-legacy/lua config parser disables `hyprctl keyword`, so the config line
-  above is the reliable method.)
-
-## Config
-
-- `hotkey` — key combo used by the best-effort runtime bind (default `SUPER,SPACE`,
-  `hyprctl` bind syntax). Has no effect under the lua parser; bind in config instead.
+  (Runtime binding via `hyprctl keyword bind` is not possible — Hyprland's non-legacy/lua
+  config parser disables `hyprctl keyword` — so the config line above is the way to bind it.)
 
 ## License
 
