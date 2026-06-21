@@ -1,7 +1,7 @@
 {
   "name": "App Launcher",
   "description": "Application launcher with folders, recents, vimium-style keyboard nav and a binary picker (extracted from ii-eve).",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "djOB2EOTWQW1",
   "icon": "apps",
   "contributes": {

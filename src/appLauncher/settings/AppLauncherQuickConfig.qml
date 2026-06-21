@@ -4,6 +4,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import "../../common"
 import ".."
 import "../vimium"
 import QtQuick
@@ -139,6 +140,7 @@ ContentPage {
                         if (LauncherPersist)
                             LauncherPersist.windowSize = value
                     }
+                    registry: page.registry
                 }
 
                 StyledText {
