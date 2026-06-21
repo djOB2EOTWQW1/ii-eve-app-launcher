@@ -298,7 +298,7 @@ MouseArea {
     onInSettingsChanged: if (inSettings) exitSelectionMode()
 
     Connections {
-        target: GlobalStates
+        target: LauncherState
         function onAppLauncherOpenChanged() {
             if (LauncherState.appLauncherOpen) return
             // Hard-reset every transient mode when the launcher is dismissed

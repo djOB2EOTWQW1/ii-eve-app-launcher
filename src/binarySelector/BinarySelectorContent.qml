@@ -47,6 +47,14 @@ MouseArea {
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.BackButton | Qt.ForwardButton
 
+    // The Loader recreates this content on every open, so onCompleted fires
+    // exactly when the picker opens: grab keyboard focus (the window uses
+    // OnDemand focus) and start from a clean filter.
+    Component.onCompleted: {
+        rootArea.filterText = "";
+        rootArea.forceActiveFocus();
+    }
+
     onPressed: event => {
         if (event.button === Qt.BackButton) folderModel.navigateBack();
         else if (event.button === Qt.ForwardButton) folderModel.navigateForward();
@@ -120,7 +128,6 @@ MouseArea {
             fill: parent
             margins: Appearance.sizes.elevationMargin
         }
-        focus: true
         border.width: 1
         border.color: Appearance.colors.colLayer0Border
         color: Appearance.colors.colLayer0
@@ -366,15 +373,4 @@ MouseArea {
         }
     }
 
-    Connections {
-        target: GlobalStates
-        function onBinarySelectorOpenChanged() {
-            if (LauncherState.binarySelectorOpen) {
-                rootArea.filterText = "";
-                rootArea.forceActiveFocus();
-            } else {
-                LauncherState.binarySelectorTargetFolderId = ""
-            }
-        }
-    }
 }

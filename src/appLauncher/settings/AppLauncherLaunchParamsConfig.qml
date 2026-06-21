@@ -12,8 +12,6 @@ import QtQuick.Layouts
 
 ContentPage {
     id: page
-    readonly property int index: 1
-    property bool register: false
     forceWidth: true
     interactive: false
 

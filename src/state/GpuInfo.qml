@@ -20,7 +20,6 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    property bool ready: false
     property bool hybrid: false
     property string dGpuVendor: ""
     property var dGpuEnv: []
@@ -35,7 +34,6 @@ Singleton {
         onExited: (exitCode, exitStatus) => {
             const text = String(lspciOut.text || "")
             root._parse(text)
-            root.ready = true
         }
     }
 

@@ -3,13 +3,10 @@ import "../state"
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.functions
 import QtQuick
-import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 Scope {
     id: root
@@ -20,7 +17,6 @@ Scope {
 
         sourceComponent: PanelWindow {
             id: panelWindow
-            readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
 
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:binarySelector"
@@ -65,10 +61,17 @@ Scope {
     }
 
     Connections {
-        target: GlobalStates
+        target: LauncherState
         function onAppLauncherOpenChanged() {
             if (!LauncherState.appLauncherOpen && LauncherState.binarySelectorOpen)
                 LauncherState.binarySelectorOpen = false
+        }
+        // Lives in the persistent Scope (not the lazily-loaded content) so it
+        // reliably clears the folder target once the picker closes — otherwise
+        // a later IPC-driven open would inherit a stale folder id.
+        function onBinarySelectorOpenChanged() {
+            if (!LauncherState.binarySelectorOpen)
+                LauncherState.binarySelectorTargetFolderId = ""
         }
     }
 
