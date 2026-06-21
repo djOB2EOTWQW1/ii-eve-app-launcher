@@ -1,6 +1,17 @@
 # ii-eve-app-launcher
 
-Application launcher extension for [ii-eve](https://github.com/djOB2EOTWQW1) / [ii-vynx](https://github.com/) Quickshell shells. Extracted from the built-in ii-eve launcher.
+## Screenshot
+
+| MainPage | Quick config |
+| ----------- | ----------- |
+| <img width="910" height="762" alt="image" src="https://github.com/user-attachments/assets/04c62a72-e3ca-442f-b70c-69637b4a0284" /> | <img width="903" height="751" alt="image" src="https://github.com/user-attachments/assets/6ca248f4-5143-44ad-8ff8-f288b890eaaa" /> |
+
+| Launch param config | Folder |
+| ----------- | ----------- |
+| <img width="917" height="757" alt="image" src="https://github.com/user-attachments/assets/bcf3f580-ea72-40e5-8d29-61b18d0fff69" /> | <img width="956" height="795" alt="image" src="https://github.com/user-attachments/assets/1bc00815-8306-47d9-88fa-921c8a2cbb8b" /> |
+
+
+Application launcher extension for [ii-eve](https://github.com/djOB2EOTWQW1/ii-eve) / [ii-vynx](https://github.com/vaguesyntax/ii-vynx) Quickshell shells. Extracted from the built-in ii-eve launcher.
 
 Provides:
 - App launcher panel (grid, folders, recents, vimium-style keyboard navigation).
