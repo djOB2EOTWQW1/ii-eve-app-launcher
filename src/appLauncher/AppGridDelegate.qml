@@ -40,6 +40,8 @@ Item {
     readonly property var folderPreviewIcons: delegateRoot.isFolder
         ? CustomApps.folderPreviewIcons(delegateRoot.modelData, 4)
         : []
+    // Per-folder accent color ("" = theme default).
+    readonly property string folderColor: delegateRoot.modelData?.color ?? ""
 
     // Live reorder shift. While another tile is dragged toward a drop target,
     // every tile between the dragged source and the drop target slides one
@@ -203,7 +205,9 @@ Item {
                 color: delegateRoot.launcher?.hoverFolderId === delegateRoot.folderId
                         && (delegateRoot.launcher?.draggedEntryIndex ?? -1) >= 0
                     ? Appearance.colors.colPrimaryContainer
-                    : Appearance.m3colors.m3surfaceContainerHigh
+                    : delegateRoot.folderColor.length > 0
+                        ? Qt.alpha(delegateRoot.folderColor, 0.5)
+                        : Appearance.m3colors.m3surfaceContainerHigh
                 border.width: delegateRoot.launcher?.hoverFolderId === delegateRoot.folderId
                         && (delegateRoot.launcher?.draggedEntryIndex ?? -1) >= 0 ? 2 : 0
                 border.color: Appearance.colors.colPrimary
@@ -468,6 +472,10 @@ Item {
                     delegateRoot.launcher.toggleAppSelection(delegateRoot.entryIndex)
                     return
                 }
+                // While a folder panel is open the root grid is move-only: a
+                // plain click must not launch (and tear down the launcher) — the
+                // app can only be dragged into the open folder.
+                if (delegateRoot.launcher?.isFolderOpen) return
                 if (!appTile.Drag.active) {
                     CustomApps.activate(delegateRoot.modelData)
                     LauncherState.appLauncherOpen = false
@@ -476,12 +484,17 @@ Item {
             onReleased: {
                 longPressTimer.stop()
                 const launcher = delegateRoot.launcher
-                const targetFolder = launcher.hoverFolderId
+                // A grid folder tile takes precedence; otherwise an open
+                // (non-modal) folder panel under the cursor is the target.
+                const targetFolder = launcher.hoverFolderId.length > 0
+                    ? launcher.hoverFolderId
+                    : launcher.hoverOpenFolderId
                 const reorderTarget = launcher.reorderTargetEntryIndex
                 const idx = delegateRoot.entryIndex
                 const inSelection = launcher.selectionModeActive
                 launcher.suppressAnim = true
                 launcher.hoverFolderId = ""
+                launcher.hoverOpenFolderId = ""
                 launcher.draggedEntryIndex = -1
                 launcher.reorderTargetEntryIndex = -1
                 if (!inSelection && idx >= 0) {
@@ -498,6 +511,7 @@ Item {
                 const launcher = delegateRoot.launcher
                 launcher.suppressAnim = true
                 launcher.hoverFolderId = ""
+                launcher.hoverOpenFolderId = ""
                 launcher.draggedEntryIndex = -1
                 launcher.reorderTargetEntryIndex = -1
                 Qt.callLater(() => launcher.suppressAnim = false)

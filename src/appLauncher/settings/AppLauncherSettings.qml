@@ -32,6 +32,11 @@ Item {
             name: Translation.tr("Launch param"),
             icon: "terminal",
             component: "AppLauncherLaunchParamsConfig.qml"
+        },
+        {
+            name: Translation.tr("Stats"),
+            icon: "bar_chart",
+            component: "AppLauncherStatsConfig.qml"
         }
     ]
 

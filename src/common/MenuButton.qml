@@ -38,6 +38,7 @@ RippleButton {
             Layout.fillWidth: true
             text: root.buttonText
             horizontalAlignment: Text.AlignLeft
+            elide: Text.ElideRight
             font.pixelSize: Appearance.font.pixelSize.small
             color: root.enabled ? Appearance.m3colors.m3onSurface : Appearance.m3colors.m3outline
 

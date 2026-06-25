@@ -16,16 +16,35 @@ Item {
     property var folder: null
     property int iconSize: 64
     property var registry: null
+    // LauncherContent root + its shared top layer. Set so a folder-app drag can
+    // float over the whole launcher (not just the panel) and feed the launcher's
+    // drag state, enabling drag between folders / out to the root grid.
+    property var launcher: null
+    property Item innerLayer: null
     signal closed()
     signal renameAppRequested(int appIndex, string currentName)
-    // Right-click on the dimmed backdrop or on empty space inside the folder
-    // panel. Coordinates are in `root`'s item space; LauncherContent uses them
-    // to position its launcher-wide AppContextMenu (so the user can add apps
-    // to the open folder without having to close it first).
+    // Right-click on empty space inside the folder panel. Coordinates are in
+    // `root`'s item space; LauncherContent uses them to position its
+    // launcher-wide AppContextMenu (so the user can add apps to the open folder
+    // without having to close it first).
     signal emptyAreaRightClicked(real x, real y)
 
     property bool selectionModeActive: false
     property var selectedAppIndices: []
+
+    // True while a folder-app drag is hovering over the panel itself — gates
+    // the launcher's "eject to root" drop so dropping inside the panel never
+    // ejects.
+    property bool overPanel: false
+
+    // Folder-scoped search query (#4). Filters this folder's apps only.
+    property string searchText: ""
+
+    // Panel size. Bound to a sensible default; the corner resize grip assigns
+    // these directly (breaking the binding) so the user can size the panel.
+    // A fresh open (new instance) restores the default.
+    property real panelW: Math.max(300, Math.min((root.width || 700) - 120, 440))
+    property real panelH: Math.max(260, Math.min((root.height || 700) - 140, 420))
 
     // Folder-internal drag-reorder state. Positions are indexes into
     // folder.appIndices, not entries indexes.
@@ -62,34 +81,37 @@ Item {
     readonly property bool itemMenuVisible: folderItemMenu.visible
     function closeItemMenu() { folderItemMenu.hide() }
 
-    Rectangle {
-        anchors.fill: parent
-        color: Appearance.colors.colScrim
-        radius: Appearance.rounding.normal
+    // Reset the folder-scoped search when the panel retargets to another folder
+    // (the Loader keeps this instance alive across folder switches).
+    onFolderChanged: if (folderSearchField) folderSearchField.text = ""
 
-        MouseArea {
-            anchors.fill: parent
-            // Swallow RightButton too — otherwise right-clicks on the dimmed
-            // backdrop fall through to the AppGridDelegate underneath and
-            // open a context menu for whichever app/folder happens to sit
-            // behind the scrim. Re-emit as emptyAreaRightClicked so the
-            // launcher can still show its "Add to folder" menu here.
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: (mouse) => {
-                if (mouse.button === Qt.LeftButton) {
-                    root.closed()
-                } else if (mouse.button === Qt.RightButton) {
-                    root.emptyAreaRightClicked(mouse.x, mouse.y)
-                }
-            }
-        }
+    // Clears suppressAnim one tick after a drop. Owned by root (not the grid
+    // delegate) so it survives the delegate being destroyed when a drop moves
+    // or removes the dragged app — a delegate-scoped Qt.callLater would throw
+    // "root is not defined" once its context is torn down.
+    Timer {
+        id: snapResetTimer
+        interval: 0
+        repeat: false
+        onTriggered: root.suppressAnim = false
+    }
+
+    // Non-modal: no input-blocking scrim. The grid behind stays interactive
+    // (click another folder to open it, drag apps between folders / out to the
+    // root). The panel floats with a shadow and is draggable by its header.
+
+    StyledRectangularShadow {
+        target: folderPanel
     }
 
     Rectangle {
         id: folderPanel
-        anchors.centerIn: parent
-        width: Math.min(parent.width - 40, 560)
-        height: Math.min(parent.height - 40, 520)
+        // Centered by default; the header drag-handle overrides x/y, breaking
+        // these bindings, so the panel stays where the user drops it.
+        x: (root.width - width) / 2
+        y: (root.height - height) / 2
+        width: root.panelW
+        height: root.panelH
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.large
         border.width: 1
@@ -97,11 +119,56 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            // Left-only on purpose: keeps left-clicks on the panel from
-            // closing the folder, while letting right-clicks fall through
-            // to the scrim's MouseArea which surfaces the launcher's
-            // empty-context menu (Add application / Add folder).
-            onPressed: (mouse) => mouse.accepted = true
+            // Catch clicks on the panel body so they don't fall through to the
+            // grid behind. Right-click surfaces the launcher's add-to-folder
+            // menu at the cursor (mapped into root's space).
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onPressed: (mouse) => {
+                if (mouse.button === Qt.RightButton) {
+                    const p = mapToItem(root, mouse.x, mouse.y)
+                    root.emptyAreaRightClicked(p.x, p.y)
+                }
+                mouse.accepted = true
+            }
+        }
+
+        // Accepts app drags over the panel. For an in-panel (folder) drag it
+        // sets overPanel so the eject-to-root drop is suppressed; for a drag
+        // coming from the root grid it advertises this folder as the drop
+        // target (hoverOpenFolderId) so the root tile's release adds it here.
+        DropArea {
+            anchors.fill: parent
+            enabled: root.draggedFolderAppPos >= 0
+                || (root.launcher?.draggedEntryIndex ?? -1) >= 0
+            onEntered: (drag) => {
+                root.overPanel = true
+                if (root.launcher && root.draggedFolderAppPos < 0)
+                    root.launcher.hoverOpenFolderId = root.folder?.id ?? ""
+                drag.accept(Qt.MoveAction)
+            }
+            onExited: {
+                root.overPanel = false
+                if (root.launcher) root.launcher.hoverOpenFolderId = ""
+            }
+        }
+
+        // Header strip is a drag handle that repositions the whole panel
+        // (clamped to the launcher bounds). Declared below the ColumnLayout in
+        // stacking, so the header buttons / search field still get their input.
+        MouseArea {
+            id: panelDragHandle
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 64
+            cursorShape: Qt.SizeAllCursor
+            drag.target: folderPanel
+            drag.axis: Drag.XAndYAxis
+            drag.threshold: 4
+            drag.minimumX: 0
+            drag.maximumX: Math.max(0, root.width - folderPanel.width)
+            drag.minimumY: 0
+            drag.maximumY: Math.max(0, root.height - folderPanel.height)
         }
 
         transform: Scale {
@@ -148,7 +215,9 @@ Item {
                     implicitWidth: 40
                     implicitHeight: 40
                     radius: width * 0.28
-                    color: Appearance.m3colors.m3primaryContainer
+                    color: (root.folder?.color ?? "").length > 0
+                        ? Qt.alpha(root.folder.color, 0.5)
+                        : Appearance.m3colors.m3primaryContainer
 
                     MaterialSymbol {
                         anchors.centerIn: parent
@@ -275,6 +344,32 @@ Item {
                 }
             }
 
+            // Folder-scoped search (#4). Filters this folder's apps only;
+            // the launcher's global search is untouched. Wrapped in a plain Item
+            // (not a Layout) with a fixed height so the field's internal
+            // fillHeight doesn't turn this row into an expanding item that
+            // competes with the grid for vertical space.
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                visible: folderAppsGrid.count > 0 || root.searchText.length > 0
+
+                ToolbarTextField {
+                    id: folderSearchField
+                    anchors.fill: parent
+                    colBackground: Appearance.m3colors.m3surfaceContainerHigh
+                    placeholderText: Translation.tr("Search in folder")
+                    onTextChanged: root.searchText = text
+                    Keys.onPressed: (event) => {
+                        if (event.key === Qt.Key_Escape) {
+                            if (text.length > 0) text = ""
+                            else root.closed()
+                            event.accepted = true
+                        }
+                    }
+                }
+            }
+
             GridView {
                 id: folderAppsGrid
                 Layout.fillWidth: true
@@ -289,7 +384,12 @@ Item {
                 model: {
                     const _e = CustomApps.entries
                     const _f = CustomApps.folders
-                    return root.folder ? CustomApps.appsInFolder(root.folder.id) : []
+                    if (!root.folder) return []
+                    const all = CustomApps.appsInFolder(root.folder.id)
+                    const q = root.searchText.trim().toLowerCase()
+                    if (q.length === 0) return all
+                    return all.filter(a => (a.name || "").toLowerCase().includes(q)
+                        || (a.path || "").toLowerCase().includes(q))
                 }
 
                 move: Transition {
@@ -315,6 +415,11 @@ Item {
                     height: folderAppsGrid.cellHeight
 
                     readonly property bool isSelected: root.selectedAppIndices.indexOf(folderAppDelegate.modelData._originalIndex) >= 0
+                    readonly property bool appRunning: {
+                        const _w = HyprlandData.windowList   // subscribe for reactivity
+                        return !!folderAppDelegate.modelData?.path
+                            && CustomApps.isPathRunning(folderAppDelegate.modelData.path)
+                    }
 
                     // Live reorder shift: tiles between the dragged source
                     // and the current drop target slide one cell toward the
@@ -422,8 +527,11 @@ Item {
                                 z: 50
                             }
                             ParentChange {
+                                // Float over the whole launcher (panel + grid),
+                                // not just the panel, so the tile can be dropped
+                                // on another folder or out to the root grid.
                                 target: folderAppTile
-                                parent: folderPanel
+                                parent: root.innerLayer ? root.innerLayer : folderPanel
                             }
                         }
 
@@ -483,6 +591,18 @@ Item {
                             }
                         }
 
+                        Rectangle {
+                            visible: folderAppDelegate.appRunning && !folderAppDelegate.isSelected
+                            anchors.bottom: parent.bottom
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottomMargin: 3
+                            implicitWidth: 6
+                            implicitHeight: 6
+                            radius: height / 2
+                            color: Appearance.colors.colPrimary
+                            z: 3
+                        }
+
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 8
@@ -516,45 +636,88 @@ Item {
                     MouseArea {
                         id: folderAppArea
                         property bool longPressActivated: false
+                        // True once an actual drag gesture began, so a plain
+                        // click never triggers move/reorder/eject on release.
+                        property bool didDrag: false
                         anchors.fill: parent
                         anchors.margins: 4
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        drag.target: root.selectionModeActive ? null : folderAppTile
+                        // Reorder/drag disabled while searching: the filtered
+                        // model's indices don't map to folder.appIndices.
+                        drag.target: (root.selectionModeActive || root.searchText.length > 0)
+                            ? null : folderAppTile
                         drag.threshold: 8
                         preventStealing: true
 
                         onPressed: (mouse) => {
                             if (mouse.button === Qt.LeftButton) {
                                 longPressActivated = false;
+                                didDrag = false;
                                 root.draggedFolderAppPos = folderAppDelegate.index;
+                                // Feed the launcher's drag state so the grid's
+                                // folder/eject drop targets react to this drag.
+                                if (root.launcher)
+                                    root.launcher.draggedEntryIndex = folderAppDelegate.modelData._originalIndex;
                                 if (!root.selectionModeActive)
                                     folderLongPressTimer.start();
                             }
                         }
                         onPositionChanged: {
-                            if (drag.active && folderLongPressTimer.running)
-                                folderLongPressTimer.stop();
+                            if (drag.active) {
+                                didDrag = true;
+                                if (folderLongPressTimer.running)
+                                    folderLongPressTimer.stop();
+                            }
                         }
                         onReleased: {
                             folderLongPressTimer.stop();
+                            const launcher = root.launcher;
                             const reorderTarget = root.reorderTargetFolderAppPos;
                             const fromPos = folderAppDelegate.index;
+                            const idx = folderAppDelegate.modelData._originalIndex;
                             const inSelection = root.selectionModeActive;
+                            // Snapshot drop state before reset.
+                            const hoverFolder = launcher?.hoverFolderId ?? "";
+                            const wasOverPanel = root.overPanel;
+                            // Dropped over the grid but not on a folder and not
+                            // an in-panel reorder → eject to the root grid.
+                            const eject = !wasOverPanel && hoverFolder.length === 0 && reorderTarget < 0;
                             root.suppressAnim = true;
                             root.draggedFolderAppPos = -1;
                             root.reorderTargetFolderAppPos = -1;
-                            if (!inSelection && reorderTarget >= 0 && reorderTarget !== fromPos && root.folder) {
-                                CustomApps.moveAppInFolder(root.folder.id, fromPos, reorderTarget);
+                            root.overPanel = false;
+                            if (launcher) {
+                                launcher.draggedEntryIndex = -1;
+                                launcher.hoverFolderId = "";
                             }
-                            Qt.callLater(() => root.suppressAnim = false);
+                            // Only act on an actual drag — a plain click (left to
+                            // launch, right for the menu) must never move/eject.
+                            if (didDrag && !inSelection && root.folder) {
+                                // Precedence: drop on another folder > in-panel
+                                // reorder > eject to the root grid.
+                                if (hoverFolder.length > 0 && hoverFolder !== root.folder.id) {
+                                    CustomApps.addAppToFolder(hoverFolder, idx);
+                                } else if (reorderTarget >= 0 && reorderTarget !== fromPos) {
+                                    CustomApps.moveAppInFolder(root.folder.id, fromPos, reorderTarget);
+                                } else if (eject) {
+                                    CustomApps.removeAppFromFolder(root.folder.id, idx);
+                                }
+                            }
+                            didDrag = false;
+                            snapResetTimer.restart();
                         }
                         onCanceled: {
                             folderLongPressTimer.stop();
                             root.suppressAnim = true;
                             root.draggedFolderAppPos = -1;
                             root.reorderTargetFolderAppPos = -1;
-                            Qt.callLater(() => root.suppressAnim = false);
+                            root.overPanel = false;
+                            if (root.launcher) {
+                                root.launcher.draggedEntryIndex = -1;
+                                root.launcher.hoverFolderId = "";
+                            }
+                            snapResetTimer.restart();
                         }
 
                         onClicked: (mouse) => {
@@ -585,7 +748,12 @@ Item {
                         id: folderReorderDropArea
                         anchors.fill: parent
                         anchors.margins: 4
-                        enabled: !folderAppTile.Drag.active
+                        // Active only for in-panel reorder drags. For a drag
+                        // coming from the root grid these tiles must stay
+                        // transparent so the event reaches the panel-wide drop
+                        // zone underneath — otherwise a full folder (tiles cover
+                        // every pixel) can't accept a new app.
+                        enabled: !folderAppTile.Drag.active && root.draggedFolderAppPos >= 0
                         onEntered: (drag) => {
                             if (root.draggedFolderAppPos < 0) return
                             if (root.draggedFolderAppPos === folderAppDelegate.index) return
@@ -610,17 +778,46 @@ Item {
 
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "drag_pan"
+                    text: root.searchText.length > 0 ? "search_off" : "drag_pan"
                     iconSize: 36
                     color: Appearance.colors.colSubtext
                 }
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("Drag apps here to add them")
+                    text: root.searchText.length > 0
+                        ? Translation.tr("No matches in this folder")
+                        : Translation.tr("Drag apps here to add them")
                     color: Appearance.colors.colSubtext
                     font.pixelSize: Appearance.font.pixelSize.small
                 }
+            }
+        }
+
+        // Bottom-right corner resize grip: drag to size the panel (the pointer
+        // position in root space becomes the panel's new bottom-right corner).
+        MouseArea {
+            id: resizeGrip
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            width: 22
+            height: 22
+            z: 30
+            cursorShape: Qt.SizeFDiagCursor
+            onPositionChanged: (m) => {
+                if (!pressed) return
+                const p = mapToItem(root, m.x, m.y)
+                root.panelW = Math.max(300, Math.min(p.x - folderPanel.x, root.width - folderPanel.x - 8))
+                root.panelH = Math.max(260, Math.min(p.y - folderPanel.y, root.height - folderPanel.y - 8))
+            }
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                rotation: 90
+                text: "open_in_full"
+                iconSize: 13
+                color: Appearance.colors.colSubtext
+                opacity: 0.6
             }
         }
 
@@ -759,7 +956,9 @@ Item {
                 MenuButton {
                     id: folderItemMoreButton
                     Layout.fillWidth: true
-                    visible: GpuInfo.hybrid
+                    // Always available now: the submenu holds "Move to…" (and
+                    // GPU options on hybrid systems).
+                    visible: true
                     symbolName: "chevron_right"
                     buttonText: Translation.tr("More")
                     onClicked: folderItemMenu._toggleSubmenu()
@@ -836,6 +1035,23 @@ Item {
                     anchors.fill: parent
                     anchors.margins: 6
                     spacing: 0
+
+                    // Move the app to another folder (non-drag fallback for #3).
+                    Repeater {
+                        model: CustomApps.folders
+                        delegate: MenuButton {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            visible: modelData.id !== (root.folder?.id ?? "")
+                            symbolName: "drive_file_move"
+                            buttonText: Translation.tr("Move to %1").arg(modelData.name || "")
+                            onClicked: {
+                                const idx = folderItemMenu.targetAppIndex
+                                folderItemMenu.hide()
+                                CustomApps.addAppToFolder(modelData.id, idx)
+                            }
+                        }
+                    }
 
                     MenuButton {
                         Layout.fillWidth: true

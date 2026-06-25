@@ -29,6 +29,9 @@ MouseArea {
     // Tracks which folder tile the current drag is hovering over.
     // Cleared on drop/release. Uses folder id to survive model updates.
     property string hoverFolderId: ""
+    // Set by an open (non-modal) folder panel while a root-grid app drag hovers
+    // over it, so dropping a root app on the panel adds it to that folder.
+    property string hoverOpenFolderId: ""
     property int draggedEntryIndex: -1
     // Active folder-drag id; "" when no folder is being dragged.
     property string draggedFolderId: ""
@@ -87,8 +90,10 @@ MouseArea {
         const e = CustomApps.entries[i]
         if (!e) return null
         let w = _entryWrapperCache[i]
-        if (!w || w.name !== e.name || w.path !== e.path || w.icon !== e.icon || w.gpu !== e.gpu) {
-            w = { name: e.name, path: e.path, icon: e.icon, gpu: e.gpu, _originalIndex: i }
+        if (!w || w.name !== e.name || w.path !== e.path || w.icon !== e.icon
+                || w.gpu !== e.gpu || w.kind !== e.kind || w.desktopId !== e.desktopId) {
+            w = { name: e.name, path: e.path, icon: e.icon, gpu: e.gpu,
+                  kind: e.kind, desktopId: e.desktopId, _originalIndex: i }
             _entryWrapperCache[i] = w
         }
         return w
@@ -765,6 +770,8 @@ MouseArea {
                 folder: folderViewer.folder
                 iconSize: root.iconSize
                 registry: root.folderRegistry
+                launcher: root
+                innerLayer: innerLayerRect
                 onClosed: folderViewer.close()
                 onRenameAppRequested: (appIndex, currentName) => renameDialog.openForApp(appIndex, currentName)
                 // The viewer swallows backdrop / empty-panel right-clicks so they

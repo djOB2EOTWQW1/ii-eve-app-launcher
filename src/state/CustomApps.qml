@@ -35,12 +35,15 @@ Singleton {
 
     property bool winePresent: false
     property bool portprotonPresent: false
+    // Used to launch .desktop apps under a dGPU env prefix (execute() can't
+    // inject env vars). Absence falls back to DesktopEntry.execute().
+    property bool gtkLaunchPresent: false
 
     readonly property var binaryExtensions: [
         "appimage", "exe", "sh", "bash", "zsh", "fish",
         "bin", "run", "py", "pl", "rb", "lua", "js",
         "x86_64", "x86_32", "x86", "arm64", "aarch64",
-        "love", "jar"
+        "love", "jar", "desktop"
     ]
 
     readonly property var binaryDirPrefixes: [
@@ -64,6 +67,14 @@ Singleton {
         command: ["bash", "-c", "command -v portproton"]
         onExited: (exitCode, exitStatus) => {
             root.portprotonPresent = (exitCode === 0)
+        }
+    }
+
+    Process {
+        running: true
+        command: ["bash", "-c", "command -v gtk-launch"]
+        onExited: (exitCode, exitStatus) => {
+            root.gtkLaunchPresent = (exitCode === 0)
         }
     }
 
@@ -187,6 +198,7 @@ Singleton {
         for (let i = 0; i < next.length; i++) {
             const e = next[i]
             if (!e || !e.path) continue
+            if (e.kind === "desktop") continue   // icon already set from the entry
             if (String(e.path).toLowerCase().endsWith('.exe')) continue
             if (e.icon && String(e.icon).startsWith('/')) continue
             // Re-evaluate with the new conservative logic. Old fuzzy-match
@@ -242,6 +254,11 @@ Singleton {
         const path = FileUtils.trimFileProtocol(filePath)
         if (!path || path.length === 0) return false
         if (root.indexOfPath(path) !== -1) return false
+        // A .desktop file (file browser / external drop) becomes a desktop
+        // entry rather than a chmod+x'd binary.
+        if (path.toLowerCase().endsWith('.desktop')) {
+            return root._addDesktopFromFile(path)
+        }
         if (!root.isLikelyBinary(path)) {
             console.warn("[CustomApps] rejected non-binary:", path)
             root.addRejected(path)
@@ -263,6 +280,62 @@ Singleton {
         } else if (icon === "application-x-executable") {
             root._enqueueSiblingExeLookup(path)
         }
+        return true
+    }
+
+    // Adds an installed application by its DesktopEntry id. Stored with the
+    // .desktop file path as `path` so indexOfPath / launch stats / folders all
+    // key on it like a normal entry; `kind`/`desktopId` route launch + running
+    // detection through the desktop-entry code paths.
+    function addDesktopApp(desktopId) {
+        const id = String(desktopId || "").trim()
+        if (id.length === 0) return false
+        const de = DesktopEntries.byId(id)
+        if (!de) {
+            console.warn("[CustomApps] no desktop entry for id:", id)
+            root.addRejected(id)
+            return false
+        }
+        // DesktopEntry exposes no source-file path; key on a synthetic,
+        // stable id-derived path so indexOfPath / stats / folders work.
+        const path = `desktop://${id}`
+        if (root.indexOfPath(path) !== -1) return false
+
+        const next = Array.from(root.entries)
+        next.push({
+            name: de.name || id,
+            path: path,
+            icon: de.icon || "application-x-executable",
+            kind: "desktop",
+            desktopId: id
+        })
+        customAppsAdapter.entries = next
+        root.changed()
+        return true
+    }
+
+    // Adds a .desktop file picked in the file browser / dropped onto the
+    // launcher. Resolves it to an indexed DesktopEntry when possible (best
+    // metadata + reliable launch); otherwise registers it by file path and
+    // launches via the .desktop directly.
+    function _addDesktopFromFile(path) {
+        const base = String(path).split('/').pop()
+        const stem = base.toLowerCase().endsWith('.desktop')
+            ? base.substring(0, base.length - 8) : base
+        let de = DesktopEntries.byId(stem)
+        if (!de && DesktopEntries.heuristicLookup) de = DesktopEntries.heuristicLookup(stem)
+        if (de && de.id) return root.addDesktopApp(de.id)
+
+        const next = Array.from(root.entries)
+        next.push({
+            name: stem,
+            path: path,
+            icon: "application-x-executable",
+            kind: "desktop",
+            desktopId: ""
+        })
+        customAppsAdapter.entries = next
+        root.changed()
         return true
     }
 
@@ -440,6 +513,28 @@ Singleton {
         return true
     }
 
+    // Accent swatches offered by the folder context menu. Stored verbatim on
+    // the folder's `color`; an empty string means "theme default".
+    readonly property var folderColorPalette: [
+        "#ef5350", "#ff7043", "#ffb300", "#66bb6a",
+        "#26a69a", "#42a5f5", "#7e57c2", "#ec407a"
+    ]
+
+    // Sets (or clears, with "") a folder's accent color.
+    function setFolderColor(folderId, color) {
+        const fi = root._folderIndexOfId(folderId)
+        if (fi < 0) return false
+        const next = Array.from(root.folders)
+        const f = Object.assign({}, next[fi])
+        const c = String(color || "").trim()
+        if (c.length > 0) f.color = c
+        else delete f.color
+        next[fi] = f
+        customAppsAdapter.folders = next
+        root.changed()
+        return true
+    }
+
     function setFolderGpu(folderId, gpu) {
         const fi = root._folderIndexOfId(folderId)
         if (fi < 0) return false
@@ -598,6 +693,8 @@ Singleton {
                 path: e.path,
                 icon: e.icon,
                 gpu: e.gpu,
+                kind: e.kind,
+                desktopId: e.desktopId,
                 _originalIndex: i
             })
         }
@@ -625,6 +722,8 @@ Singleton {
                 path: e.path,
                 icon: e.icon,
                 gpu: e.gpu,
+                kind: e.kind,
+                desktopId: e.desktopId,
                 _originalIndex: idx
             })
         }
@@ -694,61 +793,200 @@ Singleton {
 
     function _recordLaunch(path) {
         if (!path) return
+        const now = Date.now()
         const map = Object.assign({}, root.launchStatsMap)
         const cur = map[path] || { count: 0, last: 0 }
-        map[path] = { count: (cur.count || 0) + 1, last: Date.now() }
+        map[path] = {
+            count: (cur.count || 0) + 1,
+            last: now,
+            // first-launch timestamp, set once; pre-existing stats keep counting
+            // from upgrade since the original value was never recorded.
+            first: cur.first || now
+        }
         root._writeLaunchStats(map)
     }
 
     function _touchLast(path) {
         if (!path) return
+        const now = Date.now()
         const map = Object.assign({}, root.launchStatsMap)
         const cur = map[path] || { count: 0, last: 0 }
-        map[path] = { count: cur.count || 0, last: Date.now() }
+        map[path] = { count: cur.count || 0, last: now, first: cur.first || now }
         root._writeLaunchStats(map)
+    }
+
+    // --- Stats aggregates (reactive on launchStatsMap) -----------------------
+    readonly property int totalLaunches: {
+        const map = root.launchStatsMap
+        let total = 0
+        for (const k in map) total += (map[k]?.count || 0)
+        return total
+    }
+
+    // Earliest recorded first-launch across all apps, or 0 if none.
+    readonly property double firstLaunchTime: {
+        const map = root.launchStatsMap
+        let min = 0
+        for (const k in map) {
+            const f = map[k]?.first || 0
+            if (f > 0 && (min === 0 || f < min)) min = f
+        }
+        return min
+    }
+
+    // Top apps by launch count (entries still present), capped at `n`.
+    function topApps(n) {
+        const arr = root._statsEntriesList()
+        arr.sort((a, b) => b._count - a._count)
+        return arr.slice(0, n ?? 5)
     }
 
     function _norm(s) {
         return String(s || "").trim().toLowerCase()
     }
 
-    // Open Hyprland windows that belong to `path`. Uses the per-app matchClass
-    // override when set, otherwise a heuristic from the basename stem + entry
-    // name. A window matches when a candidate equals or is a substring of its
-    // class / initialClass / title (all normalized).
-    function runningWindowsForPath(path) {
-        if (!path) return []
-        const candidates = []
-        const override = root.perAppMap[path]?.matchClass
-        if (override && String(override).trim().length > 0) {
-            candidates.push(root._norm(override))
-        } else {
-            const basename = String(path).split('/').pop()
-            const _d = basename.lastIndexOf('.')
-            const stem = (_d > 0) ? basename.substring(0, _d) : basename
-            const ns = root._norm(stem)
-            if (ns.length > 0) candidates.push(ns)
-            const idx = root.indexOfPath(path)
-            if (idx >= 0) {
-                const nm = root._norm(root.entries[idx]?.name)
-                if (nm.length > 0 && candidates.indexOf(nm) < 0) candidates.push(nm)
+    // --- Running detection ---------------------------------------------------
+    // Match a window to an app by the launched process command line / working
+    // directory rather than the window class. RenPy (.sh) and PortProton (.exe)
+    // games expose a window class unrelated to the file name, so class matching
+    // never fired for them; their argv / cwd, however, carry the game path.
+    property var _winProcMap: ({})
+    // Bumped on every refresh so isPathRunning bindings re-evaluate reactively.
+    property int _winProcGen: 0
+
+    Process {
+        id: winProcScanner
+        stdout: StdioCollector { id: winProcScannerOut }
+        onExited: (exitCode, exitStatus) => root._parseWinProc(String(winProcScannerOut.text || ""))
+    }
+
+    Timer {
+        id: winProcDebounce
+        interval: 150
+        repeat: false
+        onTriggered: root._scanWinProc()
+    }
+
+    Connections {
+        target: HyprlandData
+        ignoreUnknownSignals: true
+        function onWindowListChanged() { winProcDebounce.restart() }
+    }
+
+    Connections {
+        target: LauncherState
+        function onAppLauncherOpenChanged() {
+            if (LauncherState.appLauncherOpen) winProcDebounce.restart()
+        }
+    }
+
+    Component.onCompleted: winProcDebounce.restart()
+
+    function _scanWinProc() {
+        // Re-arm rather than overlap an in-flight scan.
+        if (winProcScanner.running) { winProcDebounce.restart(); return }
+        const wins = HyprlandData?.windowList || []
+        const pids = []
+        for (let i = 0; i < wins.length; i++) {
+            const p = wins[i]?.pid
+            if (p && p > 0 && pids.indexOf(p) < 0) pids.push(p)
+        }
+        if (pids.length === 0) {
+            root._winProcMap = ({})
+            root._winProcGen++
+            return
+        }
+        // One tab-separated record per pid:  pid \t cmdline(NUL->space) \t cwd
+        const script =
+            'for p in "$@"; do' +
+            ' c=$(tr "\\0" " " < /proc/$p/cmdline 2>/dev/null);' +
+            ' d=$(readlink /proc/$p/cwd 2>/dev/null);' +
+            ' printf "%s\\t%s\\t%s\\n" "$p" "$c" "$d";' +
+            ' done'
+        winProcScanner.command = ["bash", "-c", script, "_"].concat(pids.map(p => String(p)))
+        winProcScanner.running = true
+    }
+
+    function _parseWinProc(text) {
+        const map = ({})
+        const lines = String(text).split("\n")
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i]
+            if (line.length === 0) continue
+            const parts = line.split("\t")
+            const pid = parseInt(parts[0])
+            if (!(pid > 0)) continue
+            map[pid] = {
+                cmdline: String(parts[1] || "").toLowerCase(),
+                cwd: String(parts[2] || "").toLowerCase()
             }
         }
-        if (candidates.length === 0) return []
+        root._winProcMap = map
+        root._winProcGen++
+    }
 
+    function _matchWindowsByClass(wins, candidates) {
         const out = []
-        const wins = HyprlandData.windowList || []
+        if (!candidates || candidates.length === 0) return out
         for (let i = 0; i < wins.length; i++) {
             const w = wins[i]
             const fields = [root._norm(w.class), root._norm(w.initialClass), root._norm(w.title)]
             let matched = false
             for (let c = 0; c < candidates.length && !matched; c++) {
                 const cand = candidates[c]
+                if (!cand || cand.length === 0) continue
                 for (let f = 0; f < fields.length; f++) {
                     const fv = fields[f]
                     if (fv.length > 0 && (fv === cand || fv.indexOf(cand) >= 0)) { matched = true; break }
                 }
             }
+            if (matched) out.push(w)
+        }
+        return out
+    }
+
+    // Open Hyprland windows that belong to `path`. Desktop entries and a manual
+    // `matchClass` override match by window class; everything else matches by
+    // the window process' /proc cmdline + cwd (see _scanWinProc).
+    function runningWindowsForPath(path) {
+        if (!path) return []
+        root._winProcGen   // subscribe so the result tracks scan refreshes
+        const wins = HyprlandData.windowList || []
+        const idx = root.indexOfPath(path)
+        const entry = idx >= 0 ? root.entries[idx] : null
+
+        const override = root.perAppMap[path]?.matchClass
+        const isDesktop = !!entry && (entry.kind === "desktop"
+            || String(path).toLowerCase().endsWith(".desktop"))
+
+        if ((override && String(override).trim().length > 0) || isDesktop) {
+            const candidates = []
+            if (override && String(override).trim().length > 0) {
+                candidates.push(root._norm(override))
+            } else {
+                const de = entry.desktopId ? DesktopEntries.byId(entry.desktopId) : null
+                const sc = de?.startupClass
+                if (sc) candidates.push(root._norm(sc))
+                if (entry.desktopId) candidates.push(root._norm(entry.desktopId))
+                if (entry.name) candidates.push(root._norm(entry.name))
+            }
+            return root._matchWindowsByClass(wins, candidates)
+        }
+
+        // File-path entry: match by the launched process command line / cwd.
+        const lowerPath = String(path).toLowerCase()
+        const slash = lowerPath.lastIndexOf('/')
+        const dir = slash > 0 ? lowerPath.substring(0, slash) : ""
+        const out = []
+        for (let i = 0; i < wins.length; i++) {
+            const w = wins[i]
+            const rec = root._winProcMap[w.pid]
+            if (!rec) continue
+            const cmd = rec.cmdline
+            let matched = false
+            if (lowerPath.length > 0 && cmd.indexOf(lowerPath) >= 0) matched = true
+            else if (dir.length > 4 && cmd.indexOf(dir) >= 0) matched = true
+            else if (dir.length > 4 && rec.cwd === dir) matched = true
             if (matched) out.push(w)
         }
         return out
@@ -785,6 +1023,8 @@ Singleton {
                 path: e.path,
                 icon: e.icon,
                 gpu: e.gpu,
+                kind: e.kind,
+                desktopId: e.desktopId,
                 _originalIndex: i,
                 _count: st.count || 0,
                 _last: st.last || 0
@@ -858,6 +1098,32 @@ Singleton {
 
         const path = entry.path
         const lower = path.toLowerCase()
+
+        // Installed application (.desktop). Honor dGPU via `env … gtk-launch
+        // <id>` when available; otherwise launch through the desktop entry
+        // (correct field-code / Terminal handling) and ignore the GPU pref.
+        if (entry.kind === "desktop" || lower.endsWith('.desktop')) {
+            const de = entry.desktopId ? DesktopEntries.byId(entry.desktopId) : null
+            if (useDGpu && root.gtkLaunchPresent && entry.desktopId) {
+                Quickshell.execDetached({ command: [...envPrefix, "gtk-launch", entry.desktopId] })
+                root._recordLaunch(path)
+                return
+            }
+            if (de) {
+                de.execute()
+                root._recordLaunch(path)
+                return
+            }
+            // No indexed entry (e.g. a .desktop added by file path): launch the
+            // file directly via gio (part of glib, near-universal).
+            if (lower.endsWith('.desktop')) {
+                Quickshell.execDetached({ command: [...envPrefix, "gio", "launch", path] })
+                root._recordLaunch(path)
+                return
+            }
+            console.warn("[CustomApps] cannot launch desktop entry:", path)
+            return
+        }
 
         if (lower.endsWith('.exe')) {
             if (root.portprotonPresent) {

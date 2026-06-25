@@ -204,7 +204,9 @@ ContentPage {
                             implicitWidth: 44
                             implicitHeight: 44
                             radius: width * 0.28
-                            color: Appearance.m3colors.m3surfaceContainerHigh
+                            color: (folderRow.modelData.color || "").length > 0
+                                ? Qt.alpha(folderRow.modelData.color, 0.5)
+                                : Appearance.m3colors.m3surfaceContainerHigh
 
                             FolderPreviewGrid {
                                 anchors.centerIn: parent

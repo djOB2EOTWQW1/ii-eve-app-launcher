@@ -28,6 +28,11 @@ Rectangle {
         }
         return ""
     }
+    readonly property string currentFolderColor: {
+        if (!isFolderContext) return ""
+        const f = CustomApps.folderById(selectedFolderId)
+        return f?.color ?? ""
+    }
     implicitWidth: 220
     implicitHeight: menuColumn.implicitHeight + 12
     color: Appearance.m3colors.m3surfaceContainer
@@ -171,6 +176,79 @@ Rectangle {
                 const f = CustomApps.folderById(fid);
                 root.hide();
                 root.renameFolderRequested(fid, f?.name ?? "");
+            }
+        }
+
+        // Folder accent-color picker.
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.topMargin: 4
+            Layout.bottomMargin: 4
+            visible: root.isFolderContext
+            spacing: 5
+
+            StyledText {
+                text: Translation.tr("Folder color")
+                color: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.smaller
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 5
+
+                // "Default" (theme) swatch — clears the stored color.
+                Rectangle {
+                    width: 20
+                    height: 20
+                    radius: 10
+                    color: Appearance.m3colors.m3surfaceContainerHigh
+                    border.width: 2
+                    border.color: root.currentFolderColor.length === 0
+                        ? Appearance.colors.colPrimary
+                        : Appearance.colors.colLayer0Border
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "format_color_reset"
+                        iconSize: 12
+                        color: Appearance.colors.colOnLayer1
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            CustomApps.setFolderColor(root.selectedFolderId, "")
+                            root.hide()
+                        }
+                    }
+                }
+
+                Repeater {
+                    model: CustomApps.folderColorPalette
+
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: 20
+                        height: 20
+                        radius: 10
+                        color: modelData
+                        border.width: root.currentFolderColor === modelData ? 3 : 0
+                        border.color: Appearance.colors.colOnLayer1
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                CustomApps.setFolderColor(root.selectedFolderId, modelData)
+                                root.hide()
+                            }
+                        }
+                    }
+                }
             }
         }
 

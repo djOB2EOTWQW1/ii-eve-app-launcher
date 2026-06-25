@@ -20,6 +20,45 @@ MouseArea {
     property string filterText: ""
     property var visibleFiles: []
 
+    // "files" = browse the filesystem for binaries; "apps" = pick an installed
+    // application from DesktopEntries. The typed filter applies to both.
+    property string mode: "files"
+
+    // Installed applications matching the current filter, sorted by name.
+    // DesktopEntries.applications is an UntypedObjectModel; its array lives on
+    // `.values` (same access the host's AppSearch uses).
+    readonly property var visibleApps: {
+        const q = rootArea.filterText.trim().toLowerCase()
+        const all = DesktopEntries.applications?.values || []
+        const out = []
+        for (let i = 0; i < all.length; i++) {
+            const e = all[i]
+            if (!e || e.noDisplay) continue
+            const name = String(e.name || "")
+            const gen = String(e.genericName || "")
+            if (q.length === 0
+                || name.toLowerCase().includes(q)
+                || gen.toLowerCase().includes(q)
+                || String(e.id || "").toLowerCase().includes(q)) {
+                out.push(e)
+            }
+        }
+        out.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+        return out
+    }
+
+    function selectApp(entry) {
+        if (!entry) return
+        const targetFolder = LauncherState.binarySelectorTargetFolderId
+        if (CustomApps.addDesktopApp(entry.id) && targetFolder.length > 0) {
+            const idx = CustomApps.indexOfPath(`desktop://${entry.id}`)
+            if (idx >= 0) CustomApps.addAppToFolder(targetFolder, idx)
+        }
+        rootArea.filterText = "";
+        LauncherState.binarySelectorTargetFolderId = ""
+        LauncherState.binarySelectorOpen = false;
+    }
+
     function refreshVisibleFiles() {
         const items = [];
         for (let i = 0; i < folderModel.count; i++) {
@@ -156,10 +195,68 @@ MouseArea {
                             pixelSize: Appearance.font.pixelSize.normal
                             weight: Font.Medium
                         }
-                        text: Translation.tr("Pick a binary")
+                        text: rootArea.mode === "apps"
+                            ? Translation.tr("Pick an application")
+                            : Translation.tr("Pick a binary")
+                    }
+
+                    // Files / Apps mode toggle.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 10
+                        Layout.rightMargin: 10
+                        Layout.bottomMargin: 6
+                        spacing: 6
+
+                        Repeater {
+                            model: [
+                                { m: "files", icon: "folder_open", label: Translation.tr("Files") },
+                                { m: "apps", icon: "apps", label: Translation.tr("Apps") }
+                            ]
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                radius: Appearance.rounding.full
+                                color: rootArea.mode === modelData.m
+                                    ? Appearance.colors.colPrimary
+                                    : (toggleArea.containsMouse ? Appearance.colors.colLayer2Hover : "transparent")
+
+                                Behavior on color {
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                }
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+                                    MaterialSymbol {
+                                        text: modelData.icon
+                                        iconSize: 16
+                                        color: rootArea.mode === modelData.m
+                                            ? Appearance.colors.colOnPrimary
+                                            : Appearance.colors.colOnLayer1
+                                    }
+                                    StyledText {
+                                        text: modelData.label
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: rootArea.mode === modelData.m
+                                            ? Appearance.colors.colOnPrimary
+                                            : Appearance.colors.colOnLayer1
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: toggleArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: rootArea.mode = modelData.m
+                                }
+                            }
+                        }
                     }
 
                     Item {
+                        visible: rootArea.mode === "files"
                         Layout.fillHeight: true
                         Layout.fillWidth: true
                         implicitWidth: 170
@@ -278,6 +375,7 @@ MouseArea {
 
                 AddressBar {
                     id: addressBar
+                    visible: rootArea.mode === "files"
                     Layout.margins: 4
                     Layout.fillWidth: true
                     Layout.fillHeight: false
@@ -294,16 +392,21 @@ MouseArea {
                     Layout.fillHeight: true
 
                     StyledText {
-                        visible: grid.count === 0
+                        visible: rootArea.mode === "apps"
+                            ? appsGrid.count === 0
+                            : grid.count === 0
                         anchors.centerIn: parent
                         text: rootArea.filterText.length > 0
                             ? Translation.tr("No matches for \"%1\"").arg(rootArea.filterText)
-                            : Translation.tr("Empty folder")
+                            : (rootArea.mode === "apps"
+                                ? Translation.tr("No applications")
+                                : Translation.tr("Empty folder"))
                         font.family: Appearance.font.family.reading
                     }
 
                     GridView {
                         id: grid
+                        visible: rootArea.mode === "files"
                         anchors.fill: parent
                         cellWidth: width / rootArea.columns
                         cellHeight: cellWidth / rootArea.cellAspectRatio
@@ -321,6 +424,83 @@ MouseArea {
                             width: grid.cellWidth
                             height: grid.cellHeight
                             onActivated: rootArea.selectFile(modelData.filePath, modelData.fileIsDir)
+                        }
+
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: gridRegion.width
+                                height: gridRegion.height
+                                radius: background.radius
+                            }
+                        }
+                    }
+
+                    GridView {
+                        id: appsGrid
+                        visible: rootArea.mode === "apps"
+                        anchors.fill: parent
+                        cellWidth: width / rootArea.columns
+                        cellHeight: cellWidth / rootArea.cellAspectRatio
+                        interactive: true
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        bottomMargin: filterBar.visible ? filterBar.implicitHeight + 16 : 0
+                        ScrollBar.vertical: StyledScrollBar {}
+                        model: rootArea.visibleApps
+
+                        delegate: MouseArea {
+                            id: appItem
+                            required property var modelData
+                            required property int index
+                            width: appsGrid.cellWidth
+                            height: appsGrid.cellHeight
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton
+                            onClicked: rootArea.selectApp(appItem.modelData)
+
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                radius: Appearance.rounding.normal
+                                color: appItem.containsMouse
+                                    ? Appearance.colors.colPrimary
+                                    : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)
+
+                                Behavior on color {
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 6
+                                    spacing: 4
+
+                                    Image {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        fillMode: Image.PreserveAspectFit
+                                        asynchronous: true
+                                        source: Quickshell.iconPath(appItem.modelData?.icon || "", "application-x-executable")
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        Layout.leftMargin: 6
+                                        Layout.rightMargin: 6
+                                        horizontalAlignment: Text.AlignHCenter
+                                        elide: Text.ElideRight
+                                        maximumLineCount: 2
+                                        wrapMode: Text.Wrap
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: appItem.containsMouse
+                                            ? Appearance.colors.colOnPrimary
+                                            : Appearance.colors.colOnLayer0
+                                        text: appItem.modelData?.name || ""
+                                    }
+                                }
+                            }
                         }
 
                         layer.enabled: true
