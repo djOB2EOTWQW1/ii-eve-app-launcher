@@ -90,7 +90,11 @@ Scope {
                 radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
 
                 readonly property bool fixedSize: (LauncherPersist?.windowSize ?? "settings") === "settings"
-                anchors.centerIn: parent
+                // Centered by default; the header drag-handle assigns x/y
+                // (breaking these bindings) so the user can move the launcher
+                // within the screen, like the folder panel.
+                x: (parent.width - width) / 2
+                y: (parent.height - height) / 2
                 width: fixedSize ? 900 : (parent.width - 2 * Appearance.sizes.hyprlandGapsOut)
                 height: fixedSize ? 750 : (parent.height - 2 * Appearance.sizes.hyprlandGapsOut)
 
@@ -103,6 +107,35 @@ Scope {
 
                 LauncherContent {
                     id: launcherContent
+                }
+
+                // Drag handle: grab the header (left of the action buttons) to
+                // move the whole launcher. Only when windowed — fullscreen has
+                // nowhere to move. Left-only so right-clicks still reach the
+                // content's context menu.
+                MouseArea {
+                    id: launcherDragHandle
+                    // Off only in fullscreen (nowhere to move). The left inset
+                    // clears the settings page's back button so the launcher
+                    // stays draggable there too; the right inset clears the
+                    // main header's action buttons.
+                    enabled: launcherBackground.fixedSize
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.leftMargin: 56
+                    anchors.right: parent.right
+                    anchors.rightMargin: 150
+                    height: 58
+                    z: 50
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.SizeAllCursor
+                    drag.target: launcherBackground
+                    drag.axis: Drag.XAndYAxis
+                    drag.threshold: 6
+                    drag.minimumX: 0
+                    drag.maximumX: Math.max(0, launcherBackground.parent.width - launcherBackground.width)
+                    drag.minimumY: 0
+                    drag.maximumY: Math.max(0, launcherBackground.parent.height - launcherBackground.height)
                 }
 
                 Keys.onPressed: (event) => LK.handleKey(event, launcherContent, {
