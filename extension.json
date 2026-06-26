@@ -1,7 +1,7 @@
 {
   "name": "App Launcher",
-  "description": "App launcher with folders, recents, fuzzy search, Vimium-style keyboard nav, installed-app (.desktop) and binary pickers, running indicators, launch stats, and colored movable folders.",
-  "version": "1.2.0",
+  "description": "App launcher with folders, recents, fuzzy search, Vimium-style keyboard nav, installed-app (.desktop) and binary pickers, running indicators, launch stats, colored movable folders, and a draggable launcher window.",
+  "version": "1.2.1",
   "author": "djOB2EOTWQW1",
   "icon": "apps",
   "contributes": {
