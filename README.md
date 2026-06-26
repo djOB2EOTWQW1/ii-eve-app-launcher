@@ -1,14 +1,19 @@
-# ii-eve-app-launcher
+<div align="center">
+  <h1> App Launcher </h1>
 
-## Screenshot
+<div align="center">
+  <h2> MainPage</h2>
+  <img width="916" height="776" alt="image" src="https://github.com/user-attachments/assets/bc41eb74-5a40-4c52-be3d-99ddf1c6be0b" /> 
+</div>
 
-| MainPage | Quick config |
+
+| Quick config | Launch param config |
 | ----------- | ----------- |
-| <img width="910" height="762" alt="image" src="https://github.com/user-attachments/assets/04c62a72-e3ca-442f-b70c-69637b4a0284" /> | <img width="903" height="751" alt="image" src="https://github.com/user-attachments/assets/6ca248f4-5143-44ad-8ff8-f288b890eaaa" /> |
+| <img width="913" height="764" alt="image" src="https://github.com/user-attachments/assets/6ccf2a95-a33b-4c83-b419-d574d097a1ca" /> | <img width="914" height="769" alt="image" src="https://github.com/user-attachments/assets/be270c0a-8e87-45c3-acad-060befb591bc" /> |
 
-| Launch param config | Folder |
+| Stats for fun | Folder |
 | ----------- | ----------- |
-| <img width="917" height="757" alt="image" src="https://github.com/user-attachments/assets/bcf3f580-ea72-40e5-8d29-61b18d0fff69" /> | <img width="956" height="795" alt="image" src="https://github.com/user-attachments/assets/1bc00815-8306-47d9-88fa-921c8a2cbb8b" /> |
+| <img width="914" height="765" alt="image" src="https://github.com/user-attachments/assets/99898318-d667-4f31-b7de-bd8c0e4d32d1" /> |<img width="911" height="760" alt="image" src="https://github.com/user-attachments/assets/9150baa0-337f-498d-97d6-646fdcdd9164" />  |
 
 
 Application launcher extension for [ii-eve](https://github.com/djOB2EOTWQW1/ii-eve) / [ii-vynx](https://github.com/vaguesyntax/ii-vynx) Quickshell shells. Extracted from the built-in ii-eve launcher.
